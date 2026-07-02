@@ -1,0 +1,183 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<style>
+    /* Gradient Card Headers */
+    .header-gradient-primary {
+        background: linear-gradient(135deg, #4f46e5, #6366f1);
+        color: white;
+    }
+    .header-gradient-success {
+        background: linear-gradient(135deg, #10b981, #059669);
+        color: white;
+    }
+    .header-gradient-secondary {
+        background: linear-gradient(135deg, #475569, #334155);
+        color: white;
+    }
+
+    /* Refined Form Styling */
+    .form-label-custom {
+        font-weight: 600;
+        color: #334155;
+        font-size: 0.9rem;
+        margin-bottom: 0.4rem;
+    }
+    .form-control, .form-select {
+        border: 1px solid #cbd5e1;
+        border-radius: 8px;
+        padding: 0.6rem 0.75rem;
+        transition: all 0.2s ease;
+    }
+    .form-control:focus, .form-select:focus {
+        border-color: #6366f1;
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+    }
+
+    /* Table adjustments */
+    .table th {
+        font-weight: 600;
+        font-size: 0.85rem;
+        letter-spacing: 0.5px;
+        text-transform: uppercase;
+    }
+    .table td {
+        vertical-align: middle;
+        color: #334155;
+    }
+</style>
+
+<div class="row g-4">
+    <div class="col-lg-5">
+        <div class="card">
+            <div class="card-header header-gradient-primary py-3">
+                <h4 class="mb-0 fs-5 fw-bold">📋 Enter Student Data</h4>
+            </div>
+            <div class="card-body p-4">
+                
+                {% if error %}
+                    <div class="alert alert-danger d-flex align-items-center" role="alert">
+                        <div>⚠️ {{ error }}</div>
+                    </div>
+                {% endif %}
+
+                <form method="POST" action="">
+                    {% csrf_token %}
+                    
+                    <div class="mb-3">
+                        <label class="form-label-custom">Student Type</label>
+                        <select name="student_type" class="form-select" required>
+                            <option value="0">School</option>
+                            <option value="1">College</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label-custom">Sleep Hours</label>
+                        <input type="number" step="0.1" name="sleep_hours" class="form-control" required placeholder="e.g., 7.5">
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label-custom">Study Hours</label>
+                        <input type="number" step="0.1" name="study_hours" class="form-control" required placeholder="e.g., 4.0">
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label-custom">Social Media Hours</label>
+                        <input type="number" step="0.1" name="social_media_hours" class="form-control" required placeholder="e.g., 2.5">
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label-custom">Attendance (%)</label>
+                        <input type="number" step="0.1" name="attendance" class="form-control" required placeholder="e.g., 85">
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label-custom">Exam Pressure (1-10)</label>
+                        <input type="number" step="0.1" name="exam_pressure" class="form-control" min="1" max="10" required placeholder="Scale 1 to 10">
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label-custom">Family Support (1-10)</label>
+                        <input type="number" step="0.1" name="family_support" class="form-control" min="1" max="10" required placeholder="Scale 1 to 10">
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label-custom">Month (1-12)</label>
+                        <input type="number" name="month" class="form-control" min="1" max="12" required value="1">
+                    </div>
+
+                    <button type="submit" class="btn btn-primary w-100 py-2.5 mt-2 fw-bold">Predict Stress Level</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-7">
+        
+        {% if prediction is not None %}
+            <div class="card border-0">
+                <div class="card-header header-gradient-success py-3">
+                    <h4 class="mb-0 fs-5 fw-bold">🎯 Prediction Result</h4>
+                </div>
+                <div class="card-body text-center p-4">
+                    <p class="text-secondary uppercase mb-1 font-weight-bold" style="font-size: 0.8rem; letter-spacing: 1px;">AI Model Output</p>
+                    {% if prediction == 1 %}
+                        <h2 class="text-danger fw-extrabold my-2">⚠️ High Stress Predicted</h2>
+                        <p class="text-muted small mb-0">The model indicates a high likelihood of elevated stress based on current lifestyle indicators.</p>
+                    {% else %}
+                        <h2 class="text-success fw-extrabold my-2">✅ Low / No Stress Predicted</h2>
+                        <p class="text-muted small mb-0">The model indicates well-balanced lifestyle patterns with low stress likelihood.</p>
+                    {% endif %}
+                </div>
+            </div>
+        {% endif %}
+
+        <div class="card">
+            <div class="card-header header-gradient-secondary py-3">
+                <h5 class="mb-0 fs-6 fw-bold">📊 Recent Predictions History</h5>
+            </div>
+            <div class="card-body p-0" style="overflow-x: auto;">
+                <table class="table table-striped table-hover mb-0 align-middle">
+                    <thead class="table-dark">
+                        <tr>
+                            <th class="ps-3">Type</th>
+                            <th>Sleep</th>
+                            <th>Study</th>
+                            <th>Social</th>
+                            <th>Result</th>
+                            <th class="pe-3">Date</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for record in history %}
+                        <tr>
+                            <td class="ps-3">
+                                <span class="badge bg-light text-dark border">
+                                    {% if record.student_type == 0 %}School{% else %}College{% endif %}
+                                </span>
+                            </td>
+                            <td class="fw-medium">{{ record.sleep_hours }}h</td>
+                            <td class="fw-medium">{{ record.study_hours }}h</td>
+                            <td class="text-muted">{{ record.social_media_hours }}h</td>
+                            <td>
+                                {% if record.predicted_stress == 1 %}
+                                    <span class="badge bg-danger-subtle text-danger px-2.5 py-1.5 border border-danger-subtle">High Stress</span>
+                                {% else %}
+                                    <span class="badge bg-success-subtle text-success px-2.5 py-1.5 border border-success-subtle">Normal</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-muted small pe-3">{{ record.timestamp|date:"M d, H:i" }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6" class="text-center py-4 text-muted">No prediction logs available in the system database.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
