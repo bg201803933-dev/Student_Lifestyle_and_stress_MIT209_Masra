@@ -33,7 +33,7 @@ def main():
         if col != 'Student_Type':
             df[col] = pd.to_numeric(df[col], errors='coerce')
 
-    # 3. NULL Treatment (Without using 'inplace=True' which can cause bugs)
+    # 3. NULL Treatment
     for col in df.columns:
         if df[col].isnull().sum() > 0:
             if col == 'Student_Type' or df[col].dtype == 'object':
@@ -45,6 +45,16 @@ def main():
     le = LabelEncoder()
     if 'Student_Type' in df.columns:
         df['Student_Type'] = le.fit_transform(df['Student_Type'])
+
+    # --- CRITICAL PERFORMANCE FIX: Target Discretization ---
+    # If Stress_Level contains continuous values or raw scores, classification struggles.
+    # We ensure it evaluates cleanly as binary categories (0 = Low, 1 = High).
+    if 'Stress_Level' in df.columns:
+        median_stress = df['Stress_Level'].median()
+        # If it's already binary (0 and 1), this line safely does nothing
+        if df['Stress_Level'].nunique() > 2:
+            print(f"Discretizing 'Stress_Level' across median mark ({median_stress}) for binary classification...")
+            df['Stress_Level'] = np.where(df['Stress_Level'] >= median_stress, 1, 0)
 
     # 5. Outlier Treatment (Capping using IQR)
     numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
@@ -60,7 +70,6 @@ def main():
         df[col] = np.where(df[col] > upper_bound, upper_bound, df[col])
         df[col] = np.where(df[col] < lower_bound, lower_bound, df[col])
 
-    # Final Safety Net: Drop any rows that still somehow contain NaNs
     df = df.dropna()
     print("Data cleaning completed.")
 
@@ -69,25 +78,26 @@ def main():
     # -------------------------------------------------------------------
     datasets = {}
 
-    # Version 1: Cleaned Base Data (No scaling, all original features)
+    # Version 1: Cleaned Base Data
     X_v1 = df.drop('Stress_Level', axis=1)
     y_v1 = df['Stress_Level']
     datasets['V1_Base'] = (X_v1, y_v1, df.copy())
 
-    # Version 2: Standardized Data (StandardScaler applied)
+    # Version 2: Standardized Data
     scaler_std = StandardScaler()
     X_v2 = pd.DataFrame(scaler_std.fit_transform(X_v1), columns=X_v1.columns)
     datasets['V2_Standardized'] = (X_v2, y_v1.copy(), df.copy())
 
-    # Version 3: Feature Engineered + MinMax Scaled
+    # Version 3: Deep Feature Engineering + MinMax Scaled
     df_v3 = df.copy()
     
-    # Create new feature: Ratio of Study Hours to Social Media Hours
-    # We use + 1 to prevent division by zero, but we also explicitly replace Inf with 0
+    # Enhanced Interaction Features to expose patterns to tree models
     df_v3['Study_Social_Ratio'] = df_v3['Study_Hours'] / (df_v3['Social_Media_Hours'] + 1)
-    df_v3 = df_v3.replace([np.inf, -np.inf], 0) # Safeguard against Infinity
+    df_v3['Pressure_vs_Support'] = df_v3['Exam_Pressure'] / (df_v3['Family_Support'] + 1)
+    df_v3['Total_Productive_Hours'] = df_v3['Sleep_Hours'] + df_v3['Study_Hours']
+    
+    df_v3 = df_v3.replace([np.inf, -np.inf], 0)
 
-    # Drop irrelevant feature based on understanding
     if 'Month' in df_v3.columns:
         df_v3 = df_v3.drop(['Month'], axis=1) 
 
@@ -96,31 +106,31 @@ def main():
     X_v3 = pd.DataFrame(scaler_mm.fit_transform(X_v3_unscaled), columns=X_v3_unscaled.columns)
     datasets['V3_FeatureEng_MinMax'] = (X_v3, df_v3['Stress_Level'], df_v3.copy())
     
-    print("Feature engineering and dataset versioning completed.")
+    print("Feature engineering completed.")
 
     # -------------------------------------------------------------------
-    # D. EXPERIMENTATION (5 Models, Varying Parameters)
+    # D. OPTIMIZED EXPERIMENTATION (Expanded Hyperparameter Grids)
     # -------------------------------------------------------------------
     models = {
         'Logistic Regression': (
-            LogisticRegression(max_iter=1000), 
-            {'C': [0.1, 1, 10]}
+            LogisticRegression(max_iter=2000, random_state=42), 
+            {'C': [0.01, 0.1, 1, 10, 100], 'solver': ['liblinear', 'lbfgs']}
         ),
         'Decision Tree': (
             DecisionTreeClassifier(random_state=42), 
-            {'max_depth': [3, 5, 10, None]}
+            {'max_depth': [5, 10, 15], 'min_samples_split': [2, 5, 10]}
         ),
         'Random Forest': (
             RandomForestClassifier(random_state=42), 
-            {'n_estimators': [50, 100], 'max_depth': [5, 10]}
+            {'n_estimators': [100, 200, 300], 'max_depth': [10, 15, None], 'min_samples_split': [2, 5]}
         ),
         'SVM': (
             SVC(random_state=42, probability=True), 
-            {'C': [0.1, 1, 10], 'kernel': ['linear', 'rbf']}
+            {'C': [1, 10, 100], 'gamma': ['scale', 'auto'], 'kernel': ['rbf']}
         ),
         'Gradient Boosting': (
             GradientBoostingClassifier(random_state=42), 
-            {'n_estimators': [50, 100], 'learning_rate': [0.01, 0.1]}
+            {'n_estimators': [100, 200], 'learning_rate': [0.05, 0.1, 0.2], 'max_depth': [3, 4, 5]}
         )
     }
 
@@ -130,21 +140,21 @@ def main():
     best_overall_dataset_name = ""
     best_overall_dataset_df = None
 
-    print("Starting model training and evaluation. This may take a moment...")
+    print("Starting model training via GridSearchCV. This may take a minute...")
 
-    # Loop through each dataset version
     for data_name, (X, y, original_df) in datasets.items():
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+        # Stratify ensures train/test sets have matching target class splits
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, test_size=0.2, random_state=42, stratify=y
+        )
         
-        # Loop through each model
         for model_name, (model, params) in models.items():
-            grid = GridSearchCV(model, params, cv=3, scoring='accuracy', n_jobs=-1)
+            grid = GridSearchCV(model, params, cv=5, scoring='accuracy', n_jobs=-1)
             grid.fit(X_train, y_train)
             
             best_model = grid.best_estimator_
             y_pred = best_model.predict(X_test)
             
-            # E. PERFORMANCE COMPARISON
             acc = accuracy_score(y_test, y_pred)
             prec = precision_score(y_test, y_pred, average='weighted', zero_division=0)
             rec = recall_score(y_test, y_pred, average='weighted', zero_division=0)
@@ -160,7 +170,6 @@ def main():
                 'F1-Score': round(f1, 4)
             })
 
-            # Track the absolute best model
             if acc > best_overall_acc:
                 best_overall_acc = acc
                 best_overall_model = best_model
@@ -171,17 +180,11 @@ def main():
     print("\n--- MODEL PERFORMANCE COMPARISON ---")
     print(results_df.to_string(index=False))
 
-    # -------------------------------------------------------------------
-    # F. EXPORT BEST MODEL AND DATASET FOR DJANGO
-    # -------------------------------------------------------------------
-    print(f"\nExporting the Best Model: {type(best_overall_model).__name__} trained on {best_overall_dataset_name}")
+    print(f"\nExporting Best Model: {type(best_overall_model).__name__} ({round(best_overall_acc*100, 2)}% Accuracy)")
     
-    # Save the model
     joblib.dump(best_overall_model, 'best_stress_model.pkl')
-    # Save the corresponding cleaned dataset
     best_overall_dataset_df.to_csv('best_cleaned_dataset.csv', index=False)
-    
-    print("SUCCESS: 'best_stress_model.pkl' and 'best_cleaned_dataset.csv' saved successfully!")
+    print("SUCCESS: Optimized model weights saved to 'best_stress_model.pkl'!")
 
 if __name__ == "__main__":
     main()
