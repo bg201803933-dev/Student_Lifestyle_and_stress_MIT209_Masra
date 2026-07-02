@@ -12,7 +12,7 @@ The primary objective of this project is to develop an early-warning predictive 
 
 The machine learning core is trained on an empirical behavioral dataset tracking student demographics against localized stress triggers. 
 
-**Dataset Source URL:** [Kaggle Student Stress Factors Dataset](https://www.kaggle.com/) *(Replace with your specific dataset URL if applicable)*
+**Dataset Source URL:** https://www.kaggle.com/datasets/masrajsabtal/student-stress*
 
 Features & Schema Dictionary
 The underlying database tracking model (`PredictionHistory`) incorporates these critical behavioral dimensions:
@@ -55,9 +55,3 @@ The top-performing model variant saved inside **`best_stress_model.pkl`** achiev
 **Precision & Recall:** Finetuned to ensure the system reduces False Negatives (missing a student suffering from critically high hidden stress).
 **F1-Score:** Outlined harmonic stability across uneven class weights.
 
-
-
-
-### 1. Position Workspace Directory
-```powershell
-cd C:\xampp\htdocs\DjangoStartMasraMIT209\mit209projMasra
